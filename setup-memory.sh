@@ -10,56 +10,7 @@
 #    bash setup-memory.sh --uninstall # 还原配置并移除插件
 #    bash setup-memory.sh --ref v1.2.0  # 锁定到指定 tag/branch/commit
 #
-#  v3.6 变化（合并 PR #3 by robinspt + 安全加固）：
-#    - 单文件运行时自动下载缺失的 helper scripts（probe/selfcheck/validate）
-#    - uninstall 改为精确删除配置字段，不再依赖备份恢复
-#    - probe_result_is_valid() 校验文件非空 + JSON 合法
-#    - provider 补齐默认 embedding 模型（Jina/DashScope/SiliconFlow/OpenAI/Ollama）
-#    - rerank 兜底：预设 provider 有配置时即使 probe 未验证也允许写入
-#    - Node.js >= 18 版本校验、probe stderr 不再吞掉
-#    - gen_config_from_probe 全面改用环境变量（对齐 v3.4 安全修复）
-#
-#  v3.5 变化：
-#    - 修复 Ollama 等 probe 失败时 config 丢失 embedding 字段的 bug（#2）
-#    - probe 失败后立即用已收集变量生成兜底探测结果，不再留空文件给下游
-#    - -f 改 -s 检测探测结果文件非空，双重保险
-#    - gen_config_from_probe 里 node -e 改用环境变量（对齐 v3.4 安全修复）
-#
-#  v3.4 变化：
-#    - 新增 plugins.allow 白名单（修复 git-clone 插件 "plugin not found"）
-#    - 修复 eval 命令注入（tilde 展开改用纯参数替换）
-#    - 修复 node -e 路径注入（改用环境变量传入）
-#    - 修复 rerank API key 含特殊字符时 jq 注入（改用 --arg）
-#    - DashScope embedding 用户自动检测 rerank 端点（qwen3-rerank）
-#    - 分支检测优化：fetch --prune 清理残留远程分支，fallback 硬编码 master
-#
-#  v3.3 变化：
-#    - 可选功能写入后、Gateway 重启前再跑一次 schema 过滤（修复 additional properties 崩溃）
-#    - Ollama/本地模型用户选 rerank 时提示需要在线 API Key
-#
-#  v3.2 变化：
-#    - 已有 git clone 的插件目录自动 fetch + checkout 到目标 ref
-#    - npm 安装的用户不受影响（npm update 是用户自己管的）
-#
-#  v3.1 变化：
-#    - --ref 参数：锁定 clone 版本（tag/branch/commit），默认 master
-#    - Schema 动态过滤：写入配置前按插件 configSchema 自动裁剪非法字段
-#    - 写入前双重校验：过滤前后各验一次 JSON 合法性
-#
-#  v3.0 变化：
-#    - 通用端口探测：支持任意 OpenAI 兼容 API
-#    - 快捷入口：Jina / DashScope / SiliconFlow / OpenAI / Ollama
-#    - config validate：安装/升级后自动校验配置字段
-#    - gen_config 从硬编码模板改为动态生成
-#
-#  安全机制：
-#    - 改 openclaw.json 前自动备份
-#    - 用 jq 做深度合并，已有配置不覆盖
-#    - 检测到已有 memory 插件时停下来问用户
-#    - 没有 jq 则降级为手动模式
-#    - 升级失败自动回滚到旧版本
-#
-#  文档：https://github.com/CortexReach/toolbox/tree/main/memory-lancedb-pro-setup
+#  v3.6 变化...
 # ============================================================
 
 set -euo pipefail
@@ -835,8 +786,8 @@ if $FRESH_INSTALL || ${CONFIG_MISSING:-false}; then
       echo ""
       read -p "  请粘贴 Jina API Key（直接回车跳过）/ Paste your Jina API Key (Enter to skip): " API_KEY
       if [[ -z "$API_KEY" ]]; then
-        warn "未填写 Key，保留占位符 / No key entered, placeholder saved. Replace it later."
-        API_KEY="YOUR_JINA_API_KEY"
+        warn "未填写 Key，将使用环境变量 JINA_API_KEY / No key entered, will use env JINA_API_KEY."
+        API_KEY='${JINA_API_KEY}'
       elif [[ "$API_KEY" != jina_* ]]; then
         warn "Key 不以 jina_ 开头 / Key doesn't start with jina_, please verify."
         read -p "  继续？/ Continue? (y/n) [y]: " CONFIRM
@@ -1109,7 +1060,6 @@ if $FRESH_INSTALL || ${CONFIG_MISSING:-false}; then
         fail "--selfcheck-only 模式下探测失败 / Probe failed in selfcheck-only mode."
       fi
       # 探测失败时用已收集的变量生成兜底探测结果，防止下游读到空文件
-      # Generate fallback probe result from collected variables so downstream doesn't read empty file
       PROBE_RESULT_ENV="$PROBE_RESULT" API_BASE_URL_ENV="$API_BASE_URL" API_KEY_ENV="$API_KEY" EMBEDDING_MODEL_ENV="${EMBEDDING_MODEL:-unknown}" \
         node -e "
           const result = {
@@ -1842,7 +1792,6 @@ if [[ "$PASS" -eq "$TOTAL" ]] && ! $DRY_RUN; then
                 continue
               fi
               # 使用 --arg 传递 API key，避免特殊字符注入 jq 表达式
-              # Pass API key via --arg to avoid special-char injection in jq expression
               if jq_safe_write \
                 --arg rkey "$RERANK_KEY_VAL" \
                 --arg rep  "$RERANK_EP" \
