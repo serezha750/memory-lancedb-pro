@@ -1737,16 +1737,7 @@ if [[ "$PASS" -eq "$TOTAL" ]] && ! $DRY_RUN; then
           fi
 
           echo ""
-          info "配置已更新，重启 Gateway / Config updated, restarting Gateway..."
-          RESTART_OUT2=$(openclaw gateway restart 2>&1) || true
-          if echo "$RESTART_OUT2" | grep -qiE 'disabled|unavailable|not found|error|failed'; then
-            echo "$RESTART_OUT2"
-            warn "Gateway 未能正常重启 / Gateway restart may have failed."
-            echo "    容器内请手动前台启动 / In containers, start in foreground:"
-            echo "    openclaw gateway start --foreground"
-          else
-            echo "$RESTART_OUT2"
-            success "Gateway 重启完成 / Gateway restarted."
+            success "完成"
           fi
         else
           echo ""
